@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
-os.environ['TORCH_CUDA_ARCH_LIST'] = '8.0;8.6;8.9;9.0;10.0;12.0+PTX'
+abi_flag = '-D_GLIBCXX_USE_CXX11_ABI=' + ('1' if torch._C._GLIBCXX_USE_CXX11_ABI else '0')
 
 setup(
     name='pathsig',
@@ -31,16 +31,9 @@ setup(
                 os.path.join(current_dir, 'src/pathsig/signature_forward'),
             ],
             extra_compile_args={
-                'cxx': ['-std=c++17', '-O3'],
-                'nvcc': ['-O3'],
+                'cxx': ['-O2', abi_flag, '-fvisibility=hidden'],
+                'nvcc': ['-O2', abi_flag, '-diag-suppress=20281'],
             },
-            depends=['src/pathsig/utils/SigDecomposition.h',
-                     'src/pathsig/utils/word_mappings.cuh',
-                     'src/pathsig/utils/extended_precision.cuh',
-                     'src/pathsig/utils/sig_setup.cuh',
-                     'src/pathsig/signature_backward/sig_backprop_launch.cuh',
-                     'src/pathsig/signature_forward/compute_sig_launch.cuh',
-                     ]
         )
     ],
     cmdclass={'build_ext': BuildExtension},

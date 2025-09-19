@@ -6,8 +6,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pathsig"
-version = "0.1.5"
+version = "0.1.6"
 description = "GPU-accelerated library for scalable and efficient differentiable signature computations."
 readme = "README.md"
 requires-python = ">=3.8"
 authors = [{name = "Tobias Nygaard", email = "tobiasknygard@gmail.com"}]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["pathsig"]
+include-package-data = false
+
+[tool.setuptools.exclude-package-data]
+pathsig = ["signature_forward/*", "signature_backward/*", "utils/*", "*.cu", "*.cuh", "*.cpp", "*.h", "*.hpp"]

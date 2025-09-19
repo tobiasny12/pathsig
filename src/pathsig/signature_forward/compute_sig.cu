@@ -12,16 +12,11 @@ namespace compute_sig {
 /// Constant Memory allocation for Forward Pass
 // Constant memory needed for signature computation
 constexpr int MAX_TRUNC_LEVEL = 12;
-constexpr int MAX_PARTIAL_SIG_SIZE = 1024;
 
 template<int N>
 __device__ __host__ constexpr double108_t make_dd_recip()
 {
-    if (N == 0) return {0.0, 0.0};  // sentinel
-
     // Check for exact representations
-    if (N == 1) return {0.0, 1.0};
-    if (N == 2) return {0.0, 0.5};
     if (N == 4) return {0.0, 0.25};
     if (N == 8) return {0.0, 0.125};
 
@@ -34,9 +29,9 @@ __device__ __host__ constexpr double108_t make_dd_recip()
 
 // Extended-precision constant memory
 __constant__ double108_t c_inv_ints[MAX_TRUNC_LEVEL + 1] = {
-    make_dd_recip<0>(),   // 0 (sentinel)
-    make_dd_recip<1>(),   // 1/1
-    make_dd_recip<2>(),   // 1/2
+ {0.0, 0.0},     // 0 (sentinel)
+ {0.0, 1.0},     // 1/1
+ {0.0, 0.5},     // 1/2
     make_dd_recip<3>(),   // 1/3
     make_dd_recip<4>(),   // 1/4
     make_dd_recip<5>(),   // 1/5
@@ -151,7 +146,7 @@ __global__ void computeSignature(
     unsigned batch_idx = blockIdx.y;
 
     // Batch offset for path increments
-    unsigned batch_path_offset = (uint64_t)batch_idx * num_time_steps * d;
+    unsigned batch_path_offset = batch_idx * num_time_steps * d;
 
     // Load first path increments to shared memory
     __syncthreads();
@@ -266,7 +261,7 @@ __global__ void computeSignature(
     unsigned batch_idx = blockIdx.y;
 
     // Batch offset for path increments
-    unsigned batch_path_offset = (uint64_t)batch_idx * num_time_steps * d;
+    unsigned batch_path_offset = batch_idx * num_time_steps * d;
 
     // Load first path increments to shared memory
     __syncthreads();

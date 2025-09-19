@@ -39,7 +39,7 @@ uint64_t packPrefixMappings(
     constexpr uint64_t mask = (1ULL << bits) - 1;
     uint64_t packed = 0;
     // Fixed prefixes
-    for (unsigned j = 0; j < fixed_len; ++j) {
+    for (int j = 0; j < fixed_len; ++j) {
         packed |= uint64_t(j & mask) << (bits * j);
     }
     // Varying prefixes

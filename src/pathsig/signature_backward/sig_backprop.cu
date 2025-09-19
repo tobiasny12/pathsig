@@ -85,7 +85,6 @@ __global__ void __launch_bounds__(1024, 1) signatureBackwardPass(
 
     // Pack warp info into single register to reduce pressure
     const unsigned wid = threadIdx.x / warpSize;
-    const unsigned lane = threadIdx.x % warpSize;
     const unsigned num_warps = (blockDim.x + warpSize - 1) / warpSize;
     const unsigned my_degree = degrees[threadIdx.x];
 
@@ -351,7 +350,6 @@ __global__ void __launch_bounds__(1024, 1) signatureBackwardPass(
 
     // Pack warp info into single register to reduce pressure
     const unsigned wid = threadIdx.x / warpSize;
-    const unsigned lane = threadIdx.x % warpSize;
     const unsigned num_warps = (blockDim.x + warpSize - 1) / warpSize;
     const unsigned my_degree = degrees[threadIdx.x];
 

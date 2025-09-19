@@ -1,0 +1,7 @@
+# Include license/readme/pyproject
+include LICENSE
+include README*
+include pyproject.toml
+
+# Include all package sources under src/
+recursive-include src *.cu *.cpp *.h *.cuh *.py
