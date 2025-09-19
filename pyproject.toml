@@ -1,0 +1,13 @@
+# pyproject.toml
+[build-system]
+requires = ["setuptools", "wheel", "torch"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "pathsig"
+version = "0.1.5"
+description = "GPU-accelerated library for scalable and efficient differentiable signature computations."
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [{name = "Tobias Nygaard", email = "tobiasknygard@gmail.com"}]
