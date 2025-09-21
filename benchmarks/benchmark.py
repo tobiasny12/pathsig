@@ -436,8 +436,7 @@ class SignatureBenchmark:
             aggfunc='mean'
         )
         sns.heatmap(pivot_forward, annot=True, fmt='.2f', cmap='RdYlGn',
-                    center=1, ax=ax, cbar_kws={'label': 'Speedup Factor'},
-                    vmin=0.5, vmax=2.0)
+                    center=1, ax=ax, cbar_kws={'label': 'Speedup Factor'})
         ax.set_title('Forward Speedup', fontsize=14)
         ax.set_xlabel('Batch Size')
         ax.set_ylabel('Sequence Length')
@@ -451,8 +450,8 @@ class SignatureBenchmark:
             aggfunc='mean'
         )
         sns.heatmap(pivot_training, annot=True, fmt='.2f', cmap='RdYlGn',
-                    center=1, ax=ax, cbar_kws={'label': 'Speedup Factor'},
-                    vmin=0.5, vmax=2.0)
+                    center=1, ax=ax, cbar_kws={'label': 'Speedup Factor'}
+                    )
         ax.set_title('Training Speedup (Forward + Backward)', fontsize=14)
         ax.set_xlabel('Batch Size')
         ax.set_ylabel('Sequence Length')
@@ -471,16 +470,12 @@ def generate_configs() -> List[BenchmarkConfig]:
     Applies a shared grid of (path_dim, truncation_level) to every combination of batch_size and sequence_length,
     using the same set of sequence lengths for each batch size so results are directly comparable across batch sizes.
     """
-    # Unique batch sizes from the original list (sorted for consistency)
-    BATCH_SIZES = sorted({1, 32, 64, 128, 256})
+    BATCH_SIZES = (1, 32, 64, 128, 256)
 
-    # Unique sequence lengths from the original list (sorted for consistency)
-    SEQ_LENGTHS = sorted({
-        25, 50, 100, 500, 1000
-    })
+    SEQ_LENGTHS = (25, 50, 100, 500, 1000)
 
     # Shared grid for all (B, L)
-    PATH_DIMS = (3, 4, 6, 8, 12, 16, 24, 32, 48)
+    PATH_DIMS = (2, 3, 4, 6, 8, 10, 20, 30, 40)
     TRUNC_LEVELS = (3, 4, 5, 6)
 
     return [
@@ -490,11 +485,8 @@ def generate_configs() -> List[BenchmarkConfig]:
         for m in TRUNC_LEVELS
         for d in PATH_DIMS
         if not (d >= 10 and m == 6)
-        if not (d >= 16 and m == 5)
-        if not (d >= 32 and m == 4)
-        if not (d > 80 and m > 3)
-        if not (d > 50 and m > 4)
-        if not (d > 20 and m > 5)
+        if not (d >= 20 and m == 5)
+        if not (d >= 30 and m == 4)
     ]
 
 
@@ -502,7 +494,7 @@ def main():
     """Main benchmarks execution."""
     # Create output directory
     gpu_name = torch.cuda.get_device_name(0).replace(" ", "_")
-    float_type = torch.float64
+    float_type = torch.float32
     set_keras_dtype(float_type)
     output_dir = f"signature_benchmark_{gpu_name}_{str(float_type).split('.')[-1]}"
     os.makedirs(output_dir, exist_ok=True)
