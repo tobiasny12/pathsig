@@ -90,8 +90,7 @@ In machine learning models requiring gradient propagation through the signature,
 | (64, 50, 4)     |       5 | 1.4K       | 3.21 ms + 7.03 ms         | 67.70 μs + 874.23 μs     | 10.87×    |
 | (128, 25, 4)    |       6 | 5.5K       | 4.45 ms + 7.69 ms         | 134.76 μs + 2.80 ms       | 4.14×     |
 | (256, 1000, 6)  |       5 | 9.3K       | 27.60 ms + 80.58 ms       | 10.64 ms + 292.14 ms     | 0.36×     |
-| (256, 1000, 8)  |       5 | 37.4K      | OOM                       | 41.52 ms + 1.16 s        | —         |
-| 
+| (256, 1000, 8)  |       5 | 37.4K      | OOM                       | 41.52 ms + 1.16 s        | —         | 
 
 ### Memory Usage
 `pathsig` exhibits very low memory usage, enabling signature computations that trigger out-of-memory (OOM) errors in competing libraries.
@@ -113,11 +112,6 @@ In machine learning models requiring gradient propagation through the signature,
 - Maximum truncation level: 12.
 - Maximum path dimension: 1000.
 
-
-## Limitations
-- GPU-only (no CPU support currently).
-- Maximum truncation level: 12.
-- Maximum path dimension: 1000.
 
 ## License
 MIT License, see [LICENSE](LICENSE) file for details.
