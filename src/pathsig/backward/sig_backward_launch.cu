@@ -4,10 +4,9 @@
 
 #include <ATen/ATen.h>
 #include <ATen/Dispatch.h>
-#include <ATen/cuda/CUDAContext.h>
-#include <ATen/cuda/CUDAEvent.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAException.h>
+#include <c10/cuda/CUDAStream.h>
 #include <c10/util/ArrayRef.h>
 #include <torch/library.h>
 
@@ -115,6 +114,7 @@ at::Tensor signature_backward(
     }
 
     c10::cuda::CUDAGuard device_guard(path_in.device());
+    const int dev = path_in.device().index();
 
     const at::Tensor path          = path_in.contiguous();
     const at::Tensor signature     = signature_in.contiguous();
@@ -171,18 +171,23 @@ at::Tensor signature_backward(
     const bool reduce_by_letter_pos = (d >= 30);
 
     // streams: base + (depth-1) workers
-    at::cuda::CUDAStream base_stream = at::cuda::getCurrentCUDAStream();
-    at::cuda::CUDAEvent inputs_ready;
-    inputs_ready.record(base_stream);
+    c10::cuda::CUDAStream base_stream_obj = c10::cuda::getCurrentCUDAStream(dev);
+    cudaStream_t base_stream = base_stream_obj.stream();
 
-    std::array<at::cuda::CUDAStream, 12> worker_streams = {
-        base_stream, base_stream, base_stream, base_stream, base_stream, base_stream,
-        base_stream, base_stream, base_stream, base_stream, base_stream, base_stream
+    cudaEvent_t inputs_ready;
+    C10_CUDA_CHECK(cudaEventCreateWithFlags(&inputs_ready, cudaEventDisableTiming));
+    C10_CUDA_CHECK(cudaEventRecord(inputs_ready, base_stream));
+
+    std::array<c10::cuda::CUDAStream, 12> worker_streams = {
+        base_stream_obj, base_stream_obj, base_stream_obj, base_stream_obj, base_stream_obj, base_stream_obj,
+        base_stream_obj, base_stream_obj, base_stream_obj, base_stream_obj, base_stream_obj, base_stream_obj
     };
     for (int i = 1; i < depth_i; ++i) {
-        worker_streams[i] = at::cuda::getStreamFromPool(false, base_stream.device_index());
-        inputs_ready.block(worker_streams[i]);
+        worker_streams[i] = c10::cuda::getStreamFromPool(/*isHighPriority=*/false, dev);
+        C10_CUDA_CHECK(cudaStreamWaitEvent(worker_streams[i].stream(), inputs_ready, 0));
     }
+
+    C10_CUDA_CHECK(cudaEventDestroy(inputs_ready));
 
     uint64_t level_offset      = 0ULL;
     uint64_t encoded_words_off = 0ULL; // offset for encoded_words (non-full levels only)
@@ -264,10 +269,18 @@ at::Tensor signature_backward(
         }
 
         // sync workers back to base
+        std::array<cudaEvent_t, 12> done_events{};
         for (int i = 1; i < depth_i; ++i) {
-            at::cuda::CUDAEvent done;
-            done.record(worker_streams[i]);
-            done.block(base_stream);
+            C10_CUDA_CHECK(cudaEventCreateWithFlags(&done_events[i], cudaEventDisableTiming));
+        }
+
+        for (int i = 1; i < depth_i; ++i) {
+            C10_CUDA_CHECK(cudaEventRecord(done_events[i], worker_streams[i].stream()));
+            C10_CUDA_CHECK(cudaStreamWaitEvent(base_stream, done_events[i], 0));
+        }
+
+        for (int i = 1; i < depth_i; ++i) {
+            C10_CUDA_CHECK(cudaEventDestroy(done_events[i]));
         }
 
         // increment_grads -> path_grad on base stream
@@ -276,7 +289,7 @@ at::Tensor signature_backward(
         const int grid2  = (total + block2 - 1) / block2;
 
         pathsig::kernels::backward::increment_grad_to_path_grad<scalar_t>
-            <<<grid2, block2, 0, base_stream.stream()>>>(
+            <<<grid2, block2, 0, base_stream>>>(
                 inc_grad_ptr,
                 path_grad_ptr,
                 (int)batch_size,
@@ -323,6 +336,7 @@ at::Tensor logsig_backward(
     TORCH_CHECK((int64_t)level_sizes.size() > depth, "level_sizes must have entries up to depth");
 
     c10::cuda::CUDAGuard device_guard(sig_in.device());
+    const int dev = sig_in.device().index();
 
     const at::Tensor sig         = sig_in.contiguous();
     const at::Tensor P           = P_in.contiguous();
@@ -373,7 +387,7 @@ at::Tensor logsig_backward(
         gradP_out    = at::zeros({(int64_t)batch_size, (int64_t)P_size}, sig.options());
     }
 
-    cudaStream_t stream = at::cuda::getCurrentCUDAStream().stream();
+    cudaStream_t stream = c10::cuda::getCurrentCUDAStream(dev).stream();
 
     const uint64_t* encoded_words_ptr = nullptr;
     if (alternative_projection) {

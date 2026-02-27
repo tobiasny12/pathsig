@@ -4,10 +4,9 @@
 
 #include <ATen/ATen.h>
 #include <ATen/Dispatch.h>
-#include <ATen/cuda/CUDAContext.h>
-#include <ATen/cuda/CUDAEvent.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAException.h>
+#include <c10/cuda/CUDAStream.h>
 #include <c10/util/ArrayRef.h>
 #include <torch/library.h>
 
@@ -98,6 +97,7 @@ at::Tensor computeSignature(
     }
 
     c10::cuda::CUDAGuard device_guard(path_in.device());
+    const int dev = path_in.device().index();
 
     const at::Tensor path = path_in.contiguous();
     const uint32_t batch_size = (uint32_t)path.size(0);
@@ -140,18 +140,23 @@ at::Tensor computeSignature(
             : at::empty({(int64_t)batch_size, (int64_t)sig_size}, path.options());
 
     // streams: base + (depth-1) workers
-    at::cuda::CUDAStream base_stream = at::cuda::getCurrentCUDAStream();
-    at::cuda::CUDAEvent inputs_ready;
-    inputs_ready.record(base_stream);
+    c10::cuda::CUDAStream base_stream_obj = c10::cuda::getCurrentCUDAStream(dev);
+    cudaStream_t base_stream = base_stream_obj.stream();
 
-    std::array<at::cuda::CUDAStream, 12> worker_streams = {
-        base_stream, base_stream, base_stream, base_stream, base_stream, base_stream,
-        base_stream, base_stream, base_stream, base_stream, base_stream, base_stream
+    cudaEvent_t inputs_ready;
+    C10_CUDA_CHECK(cudaEventCreateWithFlags(&inputs_ready, cudaEventDisableTiming));
+    C10_CUDA_CHECK(cudaEventRecord(inputs_ready, base_stream));
+
+    std::array<c10::cuda::CUDAStream, 12> worker_streams = {
+        base_stream_obj, base_stream_obj, base_stream_obj, base_stream_obj, base_stream_obj, base_stream_obj,
+        base_stream_obj, base_stream_obj, base_stream_obj, base_stream_obj, base_stream_obj, base_stream_obj
     };
     for (int i = 1; i < depth_i; ++i) {
-        worker_streams[i] = at::cuda::getStreamFromPool(false, base_stream.device_index());
-        inputs_ready.block(worker_streams[i]);
+        worker_streams[i] = c10::cuda::getStreamFromPool(/*isHighPriority=*/false, dev);
+        C10_CUDA_CHECK(cudaStreamWaitEvent(worker_streams[i].stream(), inputs_ready, 0));
     }
+
+    C10_CUDA_CHECK(cudaEventDestroy(inputs_ready));
 
     AT_DISPATCH_FLOATING_TYPES(path.scalar_type(), "pathsig::computeSignature", [&] {
         const scalar_t* path_ptr = path.data_ptr<scalar_t>();
@@ -201,10 +206,18 @@ at::Tensor computeSignature(
         }
 
         // sync workers with base stream
+        std::array<cudaEvent_t, 12> done_events{};
         for (int i = 1; i < depth_i; ++i) {
-            at::cuda::CUDAEvent done;
-            done.record(worker_streams[i]);
-            done.block(base_stream);
+            C10_CUDA_CHECK(cudaEventCreateWithFlags(&done_events[i], cudaEventDisableTiming));
+        }
+
+        for (int i = 1; i < depth_i; ++i) {
+            C10_CUDA_CHECK(cudaEventRecord(done_events[i], worker_streams[i].stream()));
+            C10_CUDA_CHECK(cudaStreamWaitEvent(base_stream, done_events[i], 0));
+        }
+
+        for (int i = 1; i < depth_i; ++i) {
+            C10_CUDA_CHECK(cudaEventDestroy(done_events[i]));
         }
     });
 
@@ -239,6 +252,7 @@ std::tuple<at::Tensor, at::Tensor> sig_to_logsig(
     }
 
     c10::cuda::CUDAGuard device_guard(signature_in.device());
+    const int dev = signature_in.device().index();
 
     const at::Tensor signature = signature_in.contiguous();
 
@@ -268,7 +282,7 @@ std::tuple<at::Tensor, at::Tensor> sig_to_logsig(
         P_arr  = at::zeros({(int64_t)batch_size, (int64_t)P_size}, signature.options());
     }
 
-    cudaStream_t stream = at::cuda::getCurrentCUDAStream().stream();
+    cudaStream_t stream = c10::cuda::getCurrentCUDAStream(dev).stream();
 
     const uint64_t* encoded_words_ptr = nullptr;
     if (alternative_projection) {
